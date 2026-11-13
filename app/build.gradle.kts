@@ -2,33 +2,48 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
 android {
-    namespace = "com.example.webgpu"
+    namespace = "com.example.angledpaper"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.webgpu"
-        minSdk = 31
+        applicationId = "com.example.angledpaper"
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // ANGLE is the in-process GLES backend. Native code links the prebuilt
+        // ANGLE shared libraries (libEGL.so / libGLESv2.so) packaged under
+        // src/main/jniLibs/<abi>. CI builds ANGLE for Android and copies them in
+        // before the Gradle build. See ARCHITECTURE.md and .github/workflows.
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
+                cppFlags += "-Wall -Wextra"
                 arguments += "-DANDROID_STL=c++_shared"
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+                abiFilters += listOf("arm64-v8a")
             }
         }
     }
 
+    // Enable armeabi-v7a only when required: -PangleAbiV7a=true
+    if (project.hasProperty("angleAbiV7a") && project.property("angleAbiV7a") == "true") {
+        defaultConfig.externalNativeBuild.cmake.abiFilters += listOf("armeabi-v7a")
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isDebuggable = true
         }
     }
 
@@ -53,6 +68,11 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        // Do not pick up stale prebuilt ANGLE libs from the source tree in CI
+        // unless they were produced by the ANGLE build step.
+        jniLibs {
+            pickFirsts += "lib/arm64-v8a/libc++_shared.so"
         }
     }
 }

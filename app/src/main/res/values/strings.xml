@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Webgpu</string>
-    <string name="app_name_short">Webgpu</string>
+    <string name="app_name">AngledPaper</string>
+    <string name="app_name_short">Paper</string>
     <string name="content_description_app_icon">Application icon</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_error_prefix">Error: </string>
+    <string name="btn_export">Export PNG</string>
+    <string name="content_description_export">Export current page to PNG</string>
+    <string name="msg_export_saved">PNG exported to %s</string>
+    <string name="msg_export_failed">PNG export failed</string>
 </resources>

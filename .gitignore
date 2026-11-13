@@ -20,5 +20,7 @@ captures/
 *.keystore
 .externalNativeBuild
 .cxx/
+# CI-produced ANGLE prebuilt libraries (built by the ANGLE workflow job)
+app/src/main/jniLibs/
 google-services.json
 vcs.xml

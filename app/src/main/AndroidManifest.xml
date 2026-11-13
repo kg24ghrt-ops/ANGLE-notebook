@@ -7,12 +7,23 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Webgpu">
+        android:theme="@style/Theme.AngledPaper">
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
 
         <activity
-            android:name="com.example.webgpu.MainActivity"
+            android:name="com.example.angledpaper.MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.Webgpu">
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.AngledPaper">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
