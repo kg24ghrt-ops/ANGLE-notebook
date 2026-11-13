@@ -56,7 +56,7 @@ jobs:
 
       - name: Bootstrap ANGLE build tools
         if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: cd $HOME/angle && python scripts/bootstrap.py
+        run: cd $HOME/angle && python3 scripts/bootstrap.py
         env:
           PATH: $HOME/depot_tools:$PATH
 
