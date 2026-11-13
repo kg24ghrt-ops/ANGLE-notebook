@@ -15,23 +15,15 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // ANGLE is the in-process GLES backend. Native code links the prebuilt
-        // ANGLE shared libraries (libEGL.so / libGLESv2.so) packaged under
-        // src/main/jniLibs/<abi>. CI builds ANGLE for Android and copies them in
-        // before the Gradle build. See ARCHITECTURE.md and .github/workflows.
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                cppFlags += "-Wall -Wextra"
-                arguments += "-DANDROID_STL=c++_shared"
-                abiFilters += listOf("arm64-v8a")
-            }
+        // Filament is used as a prebuilt Maven AAR (no native source compilation).
+        // ABI filter: arm64-v8a first; add armeabi-v7a only if required.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
-    // Enable armeabi-v7a only when required: -PangleAbiV7a=true
     if (project.hasProperty("angleAbiV7a") && project.property("angleAbiV7a") == "true") {
-        defaultConfig.externalNativeBuild.cmake.abiFilters += listOf("armeabi-v7a")
+        defaultConfig.ndk.abiFilters += listOf("armeabi-v7a")
     }
 
     buildTypes {
@@ -44,14 +36,6 @@ android {
         }
         debug {
             isDebuggable = true
-        }
-    }
-
-    ndkVersion = "28.2.13676358"
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
         }
     }
 
@@ -69,8 +53,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // Do not pick up stale prebuilt ANGLE libs from the source tree in CI
-        // unless they were produced by the ANGLE build step.
         jniLibs {
             pickFirsts += "lib/arm64-v8a/libc++_shared.so"
         }
@@ -78,6 +60,10 @@ android {
 }
 
 dependencies {
+    // Filament: prebuilt AAR from Maven Central — no native build in CI.
+    implementation("com.google.android.filament:filament-android:1.77.3")
+    implementation("com.google.android.filament:filamat-android:1.77.3")
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

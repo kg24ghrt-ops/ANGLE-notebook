@@ -19,94 +19,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build ANGLE (in-process GLES backend) for Android arm64-v8a.
-  # Output: libEGL.so / libGLESv2.so copied into app/src/main/jniLibs/.
-  # ---------------------------------------------------------------------------
-  build-angle:
-    name: Build ANGLE for Android (arm64-v8a)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Android SDK (for NDK path used by ANGLE build)
-        uses: android-actions/setup-android@v4
-        with:
-          api-level: 36
-          accept-licenses: true
-
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y git python3 ninja-build
-
-      - name: Get depot_tools
-        run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
-
-      - name: Get ANGLE source
-        run: git clone --depth 1 https://chromium.googlesource.com/angle/angle.git $HOME/angle
-
-      - name: Restore ANGLE cache
-        id: cache-angle
-        uses: actions/cache@v4
-        with:
-          path: app/src/main/jniLibs/arm64-v8a
-          key: angle-arm64-v8a-v1
-
-      - name: Set up Python for ANGLE bootstrap
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Bootstrap ANGLE build tools
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: |
-          export PATH="$HOME/depot_tools:$PATH"
-          command -v gclient >/dev/null || { echo "gclient not on PATH; depot_tools contents:"; ls -la "$HOME/depot_tools" | head -30; exit 1; }
-          cd $HOME/angle && python3 scripts/bootstrap.py
-        env:
-          PATH: $HOME/depot_tools:$PATH
-
-      - name: Generate ANGLE build (Android arm64-v8a)
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: cd $HOME/angle && gn gen out/Release --args='target_os="android" target_cpu="arm64" is_debug=false'
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          PATH: $HOME/depot_tools:$PATH
-
-      - name: Build ANGLE libraries (libEGL, libGLESv2)
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: ninja -C $HOME/angle/out/Release libEGL libGLESv2
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          PATH: $HOME/depot_tools:$PATH
-
-      - name: Copy ANGLE shared libraries into jniLibs
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: |
-          rm -rf app/src/main/jniLibs
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          find $HOME/angle/out/Release \( -name 'libEGL.so' -o -name 'libGLESv2.so' \) -print -exec cp {} app/src/main/jniLibs/arm64-v8a/ \;
-          ls -la app/src/main/jniLibs/arm64-v8a/
-
-      - name: Save ANGLE cache
-        if: steps.cache-angle.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: app/src/main/jniLibs/arm64-v8a
-          key: angle-arm64-v8a-v1
-
-  # ---------------------------------------------------------------------------
-  # Assemble the debug APK. ANGLE libs are restored from cache (or produced by
-  # build-angle above) and linked by CMake into libangledpaper.so.
-  # ---------------------------------------------------------------------------
   build-apk:
     name: Build debug APK
-    needs: build-angle
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -120,12 +36,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Restore ANGLE shared libraries
-        uses: actions/cache@v4
-        with:
-          path: app/src/main/jniLibs/arm64-v8a
-          key: angle-arm64-v8a-v1
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
