@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build-apk:
     name: Build debug APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -41,6 +41,7 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           api-level: 36
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           accept-licenses: true
 
       - name: Grant Gradle wrapper permission
