@@ -62,7 +62,10 @@ jobs:
 
       - name: Bootstrap ANGLE build tools
         if: steps.cache-angle.outputs.cache-hit != 'true'
-        run: cd $HOME/angle && python3 scripts/bootstrap.py
+        run: |
+          export PATH="$HOME/depot_tools:$PATH"
+          command -v gclient >/dev/null || { echo "gclient not on PATH; depot_tools contents:"; ls -la "$HOME/depot_tools" | head -30; exit 1; }
+          cd $HOME/angle && python3 scripts/bootstrap.py
         env:
           PATH: $HOME/depot_tools:$PATH
 
