@@ -6,12 +6,10 @@ on:
     branches:
       - main
       - master
-
   pull_request:
     branches:
       - main
       - master
-
   workflow_dispatch:
 
 permissions:
@@ -25,8 +23,7 @@ jobs:
 
   # ============================================================
   # BUILD ANGLE
-  # Target: Android arm64-v8a
-  # Output: libEGL.so + libGLESv2.so
+  # Android arm64-v8a
   # ============================================================
 
   build-angle:
@@ -35,15 +32,9 @@ jobs:
     timeout-minutes: 180
 
     env:
-      ANGLE_DIR: ${{ runner.temp }}/angle
       ANGLE_REF: main
-      ANGLE_OUTPUT_DIR: ${{ runner.temp }}/angle-artifact/arm64-v8a
 
     steps:
-
-      # --------------------------------------------------------
-      # Fetch ANGLE source
-      # --------------------------------------------------------
 
       - name: Checkout ANGLE
         id: angle-source
@@ -53,18 +44,15 @@ jobs:
             --depth 1 \
             --branch "$ANGLE_REF" \
             https://chromium.googlesource.com/angle/angle.git \
-            "$ANGLE_DIR"
+            "$RUNNER_TEMP/angle"
 
-          ANGLE_COMMIT="$(git -C "$ANGLE_DIR" rev-parse HEAD)"
+          ANGLE_COMMIT="$(git -C "$RUNNER_TEMP/angle" rev-parse HEAD)"
 
           echo "commit=$ANGLE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "ANGLE revision: $ANGLE_COMMIT"
 
       # --------------------------------------------------------
-      # Cache compiled ANGLE libraries
-      #
-      # The source commit is part of the key.
-      # Bump v1 if the GN configuration changes.
+      # ANGLE binary cache
       # --------------------------------------------------------
 
       - name: Restore ANGLE binary cache
@@ -75,7 +63,7 @@ jobs:
           key: angle-ubuntu24-arm64-vulkan-release-v1-${{ steps.angle-source.outputs.commit }}
 
       # --------------------------------------------------------
-      # Install Chromium depot_tools
+      # Install depot_tools
       # --------------------------------------------------------
 
       - name: Install depot_tools
@@ -89,20 +77,25 @@ jobs:
           echo "$HOME/depot_tools" >> "$GITHUB_PATH"
 
       # --------------------------------------------------------
-      # Bootstrap ANGLE and retrieve dependencies
+      # Bootstrap and synchronize ANGLE
       # --------------------------------------------------------
 
-      - name: Synchronize ANGLE dependencies
+      - name: Bootstrap ANGLE
         if: steps.angle-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}/angle
         shell: bash
         run: |
           python3 scripts/bootstrap.py
 
+      - name: Synchronize ANGLE dependencies
+        if: steps.angle-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}/angle
+        shell: bash
+        run: |
           gclient sync --nohooks
 
       # --------------------------------------------------------
-      # Install Linux build dependencies
+      # Linux build dependencies
       # --------------------------------------------------------
 
       - name: Install native build dependencies
@@ -115,7 +108,7 @@ jobs:
           gclient runhooks
 
       # --------------------------------------------------------
-      # Generate Android ARM64 build
+      # Generate GN configuration
       # --------------------------------------------------------
 
       - name: Generate ANGLE build configuration
@@ -126,12 +119,9 @@ jobs:
           gn gen out/Android --args='
             target_os = "android"
             target_cpu = "arm64"
-
             arm_control_flow_integrity = "none"
-
             is_component_build = false
             is_debug = false
-
             angle_enable_vulkan = true
           '
 
@@ -139,7 +129,7 @@ jobs:
       # Compile ANGLE
       # --------------------------------------------------------
 
-      - name: Build ANGLE shared libraries
+      - name: Build ANGLE libraries
         if: steps.angle-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}/angle
         shell: bash
@@ -147,7 +137,7 @@ jobs:
           autoninja -C out/Android libEGL libGLESv2
 
       # --------------------------------------------------------
-      # Stage compiled libraries
+      # Collect native libraries
       # --------------------------------------------------------
 
       - name: Collect ANGLE libraries
@@ -155,44 +145,47 @@ jobs:
         working-directory: ${{ runner.temp }}/angle
         shell: bash
         run: |
-          mkdir -p "$ANGLE_OUTPUT_DIR"
+          OUTPUT="$RUNNER_TEMP/angle-artifact/arm64-v8a"
+
+          mkdir -p "$OUTPUT"
 
           for library in libEGL.so libGLESv2.so; do
             SOURCE="out/Android/$library"
-            DEST="$ANGLE_OUTPUT_DIR/$library"
 
             if [ ! -s "$SOURCE" ]; then
               echo "::error::Missing ANGLE output: $SOURCE"
               exit 1
             fi
 
-            install -m 0644 "$SOURCE" "$DEST"
+            install -m 0644 "$SOURCE" "$OUTPUT/$library"
           done
 
+          ls -lh "$OUTPUT"
+
       # --------------------------------------------------------
-      # Validate cached or freshly compiled libraries
+      # Validate cache or freshly compiled libraries
       # --------------------------------------------------------
 
       - name: Verify ANGLE outputs
         shell: bash
         run: |
-          for library in libEGL.so libGLESv2.so; do
-            FILE="$ANGLE_OUTPUT_DIR/$library"
+          OUTPUT="$RUNNER_TEMP/angle-artifact/arm64-v8a"
 
-            if [ ! -s "$FILE" ]; then
-              echo "::error::Missing or empty library: $FILE"
+          for library in libEGL.so libGLESv2.so; do
+            if [ ! -s "$OUTPUT/$library" ]; then
+              echo "::error::Missing or empty library: $library"
               exit 1
             fi
 
-            echo "Verified: $FILE"
+            echo "Verified: $library"
           done
 
       # --------------------------------------------------------
-      # Transfer libraries to the APK build job
+      # Transfer libraries to APK job
       # --------------------------------------------------------
 
       - name: Upload ANGLE libraries
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: angle-libs-arm64-v8a
           path: ${{ runner.temp }}/angle-artifact/
@@ -201,8 +194,7 @@ jobs:
 
 
   # ============================================================
-  # BUILD ANDROID APPLICATION
-  # Receives ANGLE libraries from build-angle.
+  # BUILD ANDROID APK
   # ============================================================
 
   build-apk:
@@ -213,25 +205,21 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------------
-      # Checkout application
-      # --------------------------------------------------------
-
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@v4
 
       # --------------------------------------------------------
       # Download ANGLE libraries
       # --------------------------------------------------------
 
       - name: Download ANGLE libraries
-        uses: actions/download-artifact@v8.0.2
+        uses: actions/download-artifact@v4
         with:
           name: angle-libs-arm64-v8a
           path: ${{ runner.temp }}/angle-artifact
 
       # --------------------------------------------------------
-      # Install ANGLE into Android jniLibs
+      # Install ANGLE libraries
       # --------------------------------------------------------
 
       - name: Install ANGLE native libraries
@@ -254,11 +242,11 @@ jobs:
           ls -lh "$DEST"
 
       # --------------------------------------------------------
-      # Java toolchain
+      # Java
       # --------------------------------------------------------
 
       - name: Set up Java 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -268,17 +256,17 @@ jobs:
       # --------------------------------------------------------
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.4
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           accept-android-sdk-licenses: true
 
       # --------------------------------------------------------
-      # Gradle configuration and caching
+      # Gradle
       # --------------------------------------------------------
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
 
       # --------------------------------------------------------
       # Build APK
@@ -295,7 +283,7 @@ jobs:
             assembleDebug
 
       # --------------------------------------------------------
-      # Verify ANGLE is included in the APK
+      # Verify packaged ANGLE libraries
       # --------------------------------------------------------
 
       - name: Verify APK native libraries
@@ -324,7 +312,7 @@ jobs:
       # --------------------------------------------------------
 
       - name: Upload APK artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
           path: app/build/outputs/apk/**/*.apk
