@@ -1,14 +1,11 @@
+
 name: Android Native Build
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -34,15 +31,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          api-level: 36
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-          accept-licenses: true
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+          accept-android-sdk-licenses: true
 
       - name: Grant Gradle wrapper permission
         run: chmod +x ./gradlew
@@ -50,10 +46,10 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload APK artifacts
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: '**/build/outputs/apk/**/*.apk'
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
