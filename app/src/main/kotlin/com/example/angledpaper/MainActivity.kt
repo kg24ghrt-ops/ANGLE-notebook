@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
     override fun onResume() {
         super.onResume()
-        if (rendering && uiHelper.readyToRender) {
+        if (rendering && uiHelper.isReadyToRender()) {
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
     }
 
     override fun doFrame(frameTimeNanos: Long) {
-        if (!rendering || !uiHelper.readyToRender) return
+        if (!rendering || !uiHelper.isReadyToRender()) return
         renderFrame(frameTimeNanos)
         pushStatus()
         Choreographer.getInstance().postFrameCallback(this)
