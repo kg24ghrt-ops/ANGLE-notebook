@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.example.angledpaper"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.angledpaper"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -61,8 +61,9 @@ android {
 
 dependencies {
     // Filament: prebuilt AAR from Maven Central — no native build in CI.
-    implementation("com.google.android.filament:filament-android:1.77.3")
-    implementation("com.google.android.filament:filamat-android:1.77.3")
+    // Version 1.72.0 is compatible with compileSdk 36 (newer versions require 37+).
+    implementation("com.google.android.filament:filament-android:1.72.0")
+    implementation("com.google.android.filament:filamat-android:1.72.0")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")

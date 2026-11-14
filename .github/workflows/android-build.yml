@@ -40,8 +40,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          api-level: 37
-          packages: 'platform-tools platforms;android-37 build-tools;37.0.0'
+          api-level: 36
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           accept-licenses: true
 
       - name: Grant Gradle wrapper permission
