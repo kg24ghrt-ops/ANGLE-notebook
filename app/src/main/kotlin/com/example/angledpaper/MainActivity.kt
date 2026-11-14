@@ -1,15 +1,20 @@
 package com.example.angledpaper
 
+import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Bitmap.CompressFormat.PNG
 import android.os.Bundle
+import android.view.Choreographer
 import android.view.Surface
 import android.view.TextureView
+import android.widget.Button
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.angledpaper.databinding.ActivityMainBinding
 import com.google.android.filament.Camera
 import com.google.android.filament.Color
+import com.google.android.filament.EntityManager
 import com.google.android.filament.Engine
 import com.google.android.filament.Filament
 import com.google.android.filament.Renderer
@@ -18,7 +23,7 @@ import com.google.android.filament.SwapChain
 import com.google.android.filament.UiHelper
 import com.google.android.filament.View
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
     companion object {
         // Loads the Filament JNI library. Must run before any Filament call.
@@ -30,18 +35,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var uiHelper: UiHelper
     private lateinit var textureView: TextureView
-    private lateinit var statusView: android.widget.TextView
-    private lateinit var exportButton: android.widget.Button
+    private lateinit var statusView: TextView
+    private lateinit var exportButton: Button
 
     private var engine: Engine? = null
     private var renderer: Renderer? = null
     private var scene: Scene? = null
     private var view: View? = null
     private var camera: Camera? = null
+    private var cameraEntity: Long = 0
     private var swapChain: SwapChain? = null
 
     private var width = 0
     private var height = 0
+    private var rendering = false
     private var lastStatus = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,12 +68,7 @@ class MainActivity : AppCompatActivity() {
         exportButton = binding.export
 
         uiHelper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
-        uiHelper.renderCallback = object : UiHelper.RenderCallback {
-            override fun onRenderCallback(frameTimeNanos: Long) {
-                renderFrame()
-                pushStatus()
-            }
-
+        uiHelper.setRenderCallback(object : UiHelper.RendererCallback {
             override fun onNativeWindowChanged(surface: Surface) {
                 val eng = engine ?: return
                 swapChain = eng.createSwapChain(surface)
@@ -76,15 +78,24 @@ class MainActivity : AppCompatActivity() {
                     width = w
                     height = h
                     setupScene(w, h)
+                    rendering = true
+                    Choreographer.getInstance().postFrameCallback(this@MainActivity)
                 }
             }
 
             override fun onDetachedFromSurface() {
+                rendering = false
+                Choreographer.getInstance().removeFrameCallback(this@MainActivity)
                 val eng = engine ?: return
                 swapChain?.let { eng.destroySwapChain(it) }
                 swapChain = null
             }
-        }
+
+            override fun onResized(w: Int, h: Int) {
+                width = w
+                height = h
+            }
+        })
 
         uiHelper.attachTo(textureView)
 
@@ -92,10 +103,16 @@ class MainActivity : AppCompatActivity() {
         renderer = engine?.createRenderer()
         scene = engine?.createScene()
         view = engine?.createView()
-        camera = engine?.createCamera()
+
+        val entityManager = EntityManager.get()
+        cameraEntity = entityManager.create()
+        camera = engine?.createCamera(cameraEntity)
 
         view?.camera = camera
         view?.scene = scene
+
+        // Cream paper base clear color.
+        renderer?.setClearColor(Color(0.996f, 0.976f, 0.890f, 1.0f))
 
         exportButton.setOnClickListener {
             exportPng()
@@ -104,10 +121,28 @@ class MainActivity : AppCompatActivity() {
         pushStatus()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (rendering && uiHelper.isReadyToRender) {
+            Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Choreographer.getInstance().removeFrameCallback(this)
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        if (!rendering || !uiHelper.isReadyToRender) return
+        renderFrame()
+        pushStatus()
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
     private fun setupScene(w: Int, h: Int) {
-        // Configure camera for orthographic screen-space rendering (0..1 in X and Y).
         camera?.setProjection(
-            Camera.Projection.ORTHOGRAPHIC,
+            Camera.Projection.ORTHO,
             0f, 1f,
             0f, 1f,
             -1f, 1f
@@ -117,21 +152,14 @@ class MainActivity : AppCompatActivity() {
             0f, 0f, 0f,
             0f, 1f, 0f
         )
-
-        // Cream paper base clear color (matches Filament sample pattern).
-        renderer?.clearOptions = renderer?.clearOptions?.apply {
-            this.clear = true
-            this.color = Color(0.996f, 0.976f, 0.890f, 1.0f)
-        }
     }
 
     private fun renderFrame() {
         val sc = swapChain ?: return
         val rend = renderer ?: return
-        val frameTime = System.nanoTime()
-        rend.beginFrame(sc, frameTime)
-        rend.render(sc, view!!)
-        rend.endFrame(sc)
+        if (!rend.beginFrame(sc)) return
+        rend.render(view!!)
+        rend.endFrame()
     }
 
     private fun exportPng() {
@@ -141,16 +169,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val bytes = BitmapToPng.encode(bitmap)
-        if (bytes.isEmpty()) {
-            statusView.text = getString(R.string.msg_export_failed)
-            statusView.setTextColor(ContextCompat.getColor(this, R.color.status_error))
-            return
-        }
-
         val file = java.io.File(cacheDir, "page_${System.currentTimeMillis()}.png")
         try {
-            file.outputStream().use { out -> out.write(bytes) }
+            val out = file.outputStream()
+            try {
+                val success = bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                if (!success) throw Exception("PNG compress failed")
+            } finally {
+                out.close()
+            }
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 this, "${packageName}.provider", file)
             val intent = android.content.Intent(Intent.ACTION_SEND).apply {
@@ -185,9 +212,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        uiHelper.detachFromView()
+        Choreographer.getInstance().removeFrameCallback(this)
+        rendering = false
+        uiHelper.detach()
         swapChain?.let { engine?.destroySwapChain(it) }
         camera?.let { engine?.destroyCamera(it) }
+        val entityManager = EntityManager.get()
+        entityManager.destroy(cameraEntity)
         view?.let { engine?.destroyView(it) }
         scene?.let { engine?.destroyScene(it) }
         renderer?.let { engine?.destroyRenderer(it) }
@@ -199,90 +230,5 @@ class MainActivity : AppCompatActivity() {
         camera = null
         swapChain = null
         super.onDestroy()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Bitmap -> PNG encoder (pure Kotlin, no native code needed)
-// ---------------------------------------------------------------------------
-object BitmapToPng {
-    fun encode(bitmap: Bitmap): ByteArray {
-        val width = bitmap.width
-        val height = bitmap.height
-        val rowBytes = ((width * 8 + 31) / 32) * 4
-        val rawSize = rowBytes * height + height  // +1 filter byte per row
-        val headerSize = 33
-        val output = ByteArray(headerSize + rawSize + 36)
-
-        var pos = 0
-        // PNG signature
-        val sig = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10)
-        System.arraycopy(sig, 0, output, 0, 8)
-        pos = 8
-
-        // IHDR chunk
-        pos = writeChunk(output, pos, "IHDR", byteArrayOf(
-            (width shr 24).toByte(), (width shr 16).toByte(), (width shr 8).toByte(), width.toByte(),
-            (height shr 24).toByte(), (height shr 16).toByte(), (height shr 8).toByte(), height.toByte(),
-            8,  // bit depth
-            6,  // color type: RGBA
-            0,  // compression
-            0,  // filter
-            0   // interlace
-        ))
-
-        // IDAT chunk (raw, uncompressed - valid PNG, just larger)
-        val idatContent = ByteArray(rawSize)
-        var ip = 0
-        for (y in 0 until height) {
-            idatContent[ip++] = 0  // filter: none
-            for (x in 0 until width) {
-                val c = bitmap.getPixel(x, y)
-                idatContent[ip++] = ((c ushr 16) and 0xff).toByte()  // R
-                idatContent[ip++] = ((c ushr 8) and 0xff).toByte()   // G
-                idatContent[ip++] = (c and 0xff).toByte()            // B
-                idatContent[ip++] = ((c ushr 24) and 0xff).toByte()  // A
-            }
-        }
-        pos = writeChunk(output, pos, "IDAT", idatContent)
-
-        // IEND chunk
-        pos = writeChunk(output, pos, "IEND", byteArrayOf())
-
-        return output.copyOfRange(0, pos)
-    }
-
-    private fun writeChunk(out: ByteArray, pos: Int, type: String, data: ByteArray): Int {
-        val len = data.size
-        out[pos] = (len shr 24).toByte()
-        out[pos + 1] = (len shr 16).toByte()
-        out[pos + 2] = (len shr 8).toByte()
-        out[pos + 3] = len.toByte()
-        var crcPos = pos + 4
-        System.arraycopy(type.toByteArray(Charsets.UTF_8), 0, out, crcPos, 4)
-        crcPos += 4
-        System.arraycopy(data, 0, out, crcPos, len)
-        crcPos += len
-        val crc = crc32((type.toByteArray(Charsets.UTF_8) + data))
-        out[crcPos] = (crc shr 24).toByte()
-        out[crcPos + 1] = (crc shr 16).toByte()
-        out[crcPos + 2] = (crc shr 8).toByte()
-        out[crcPos + 3] = crc.toByte()
-        return crcPos + 4
-    }
-
-    private fun crc32(data: ByteArray): Int {
-        var crc = 0xFFFFFFFF
-        for (b in data) {
-            crc = crc xor (b.toInt() and 0xff)
-            for (i in 0 until 8) {
-                if ((crc and 1) == 1) {
-                    crc = (crc ushr 1) xor 0xEDB88320
-                } else {
-                    crc = crc ushr 1
-                }
-            }
-        }
-        return crc inv
     }
 }
