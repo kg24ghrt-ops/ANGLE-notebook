@@ -19,8 +19,9 @@ import com.google.android.filament.Filament
 import com.google.android.filament.Renderer
 import com.google.android.filament.Scene
 import com.google.android.filament.SwapChain
-import com.google.android.filament.android.UiHelper
 import com.google.android.filament.View
+import com.google.android.filament.Viewport
+import com.google.android.filament.android.UiHelper
 
 class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
@@ -74,9 +75,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
                 val w = textureView.width
                 val h = textureView.height
                 if (w > 0 && h > 0) {
-                    width = w
-                    height = h
-                    setupScene(w, h)
+                    updateSurface(w, h)
                     rendering = true
                     Choreographer.getInstance().postFrameCallback(this@MainActivity)
                 }
@@ -91,8 +90,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
             }
 
             override fun onResized(w: Int, h: Int) {
-                width = w
-                height = h
+                updateSurface(w, h)
             }
         })
 
@@ -144,11 +142,24 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
         Choreographer.getInstance().postFrameCallback(this)
     }
 
+    private fun updateSurface(w: Int, h: Int) {
+        width = w
+        height = h
+        view?.viewport = Viewport(0, 0, w, h)
+        setupScene(w, h)
+    }
+
     private fun setupScene(w: Int, h: Int) {
+        val aspect = w.toDouble() / h.toDouble()
+        val (right, top) = if (w >= h) {
+            aspect to 1.0
+        } else {
+            1.0 to 1.0 / aspect
+        }
         camera?.setProjection(
             Camera.Projection.ORTHO,
-            0.0, 1.0,
-            0.0, 1.0,
+            0.0, right,
+            0.0, top,
             -1.0, 1.0
         )
         camera?.lookAt(
