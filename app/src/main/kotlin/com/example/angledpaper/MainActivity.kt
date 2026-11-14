@@ -13,14 +13,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.angledpaper.databinding.ActivityMainBinding
 import com.google.android.filament.Camera
-import com.google.android.filament.Color
 import com.google.android.filament.EntityManager
 import com.google.android.filament.Engine
 import com.google.android.filament.Filament
 import com.google.android.filament.Renderer
 import com.google.android.filament.Scene
 import com.google.android.filament.SwapChain
-import com.google.android.filament.UiHelper
+import com.google.android.filament.android.UiHelper
 import com.google.android.filament.View
 
 class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
@@ -43,7 +42,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
     private var scene: Scene? = null
     private var view: View? = null
     private var camera: Camera? = null
-    private var cameraEntity: Long = 0
+    private var cameraEntity: Int = 0
     private var swapChain: SwapChain? = null
 
     private var width = 0
@@ -112,7 +111,12 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
         view?.scene = scene
 
         // Cream paper base clear color.
-        renderer?.setClearColor(Color(0.996f, 0.976f, 0.890f, 1.0f))
+        renderer?.setClearOptions(
+            Renderer.ClearOptions().apply {
+                clearColor = doubleArrayOf(0.996, 0.976, 0.890, 1.0)
+                clear = true
+            }
+        )
 
         exportButton.setOnClickListener {
             exportPng()
@@ -123,7 +127,7 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
 
     override fun onResume() {
         super.onResume()
-        if (rendering && uiHelper.isReadyToRender) {
+        if (rendering && uiHelper.readyToRender) {
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -134,8 +138,8 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
     }
 
     override fun doFrame(frameTimeNanos: Long) {
-        if (!rendering || !uiHelper.isReadyToRender) return
-        renderFrame()
+        if (!rendering || !uiHelper.readyToRender) return
+        renderFrame(frameTimeNanos)
         pushStatus()
         Choreographer.getInstance().postFrameCallback(this)
     }
@@ -143,21 +147,21 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
     private fun setupScene(w: Int, h: Int) {
         camera?.setProjection(
             Camera.Projection.ORTHO,
-            0f, 1f,
-            0f, 1f,
-            -1f, 1f
+            0.0, 1.0,
+            0.0, 1.0,
+            -1.0, 1.0
         )
         camera?.lookAt(
-            0f, 0f, 1f,
-            0f, 0f, 0f,
-            0f, 1f, 0f
+            0.0, 0.0, 1.0,
+            0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0
         )
     }
 
-    private fun renderFrame() {
+    private fun renderFrame(frameTimeNanos: Long) {
         val sc = swapChain ?: return
         val rend = renderer ?: return
-        if (!rend.beginFrame(sc)) return
+        if (!rend.beginFrame(sc, frameTimeNanos)) return
         rend.render(view!!)
         rend.endFrame()
     }
@@ -216,13 +220,11 @@ class MainActivity : AppCompatActivity(), Choreographer.FrameCallback {
         rendering = false
         uiHelper.detach()
         swapChain?.let { engine?.destroySwapChain(it) }
-        camera?.let { engine?.destroyCamera(it) }
-        val entityManager = EntityManager.get()
-        entityManager.destroy(cameraEntity)
+        engine?.destroyCameraComponent(cameraEntity)
         view?.let { engine?.destroyView(it) }
         scene?.let { engine?.destroyScene(it) }
         renderer?.let { engine?.destroyRenderer(it) }
-        engine?.let { Engine.destroy(it) }
+        engine?.destroy()
         engine = null
         renderer = null
         scene = null
