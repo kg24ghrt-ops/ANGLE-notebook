@@ -51,3 +51,4 @@ Locally (for reference only — do not run builds here per AGENTS.md):
 - `app/src/main/AndroidManifest.xml` — FileProvider + MainActivity
 - `ARCHITECTURE.md` — Filament init diagram, draw loop, export path
 - `.github/workflows/android-build.yml` — simple Gradle CI
+# Stories1-and-
